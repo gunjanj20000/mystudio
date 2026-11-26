@@ -525,10 +525,146 @@ app.post('/api/render/cancel/:jobId', (req, res) => {
   res.json({ success: true, message: 'Cancelled' });
 });
 
+// Helper to call external AI Providers (DeepSeek, OpenRouter, OpenAI) with Autism-friendly prompt
+async function generateScenesWithAI(
+  provider: string,
+  apiKey: string,
+  model: string | undefined,
+  topic: string,
+  language: string,
+  visualStyle: string,
+  durationMinutes: number
+): Promise<any[]> {
+  const prompt = `You are an educational video scriptwriter creating personalized visual learning videos for a 12-year-old nonverbal autistic child.
+Topic: "${topic}"
+Target Duration: ${durationMinutes} minutes
+Visual Style: ${visualStyle}
+Language Preference: ${language}
+
+AUTISM LEARNING RULES:
+1. Short, concrete, literal sentences. Avoid metaphors, idioms, irony, or abstract phrasing.
+2. One clear, single focus concept or action per scene.
+3. Provide BOTH Hindi narration (Devanagari script) and English narration for each scene.
+4. Provide onScreenText (short English text) and hindiOnScreenText (short Devanagari Hindi text).
+5. Specify soundEffect: "gentle_chime", "soft_bell", "water_splash", "brush_scrub", "nature_breeze", "pop", or "success_chime".
+6. Keep scene duration between 6 to 10 seconds.
+7. Return between 3 to 6 scenes.
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "scenes": [
+    {
+      "title": "Step 1: Concrete title",
+      "educationalObjective": "Clear simple objective",
+      "hindiNarration": "सरल और शांत हिंदी वाक्य।",
+      "englishNarration": "Simple and calm English sentence.",
+      "onScreenText": "Short English Text",
+      "hindiOnScreenText": "संक्षिप्त हिंदी पाठ",
+      "imageDescription": "Clear description of the single object or action",
+      "visualStyle": "${visualStyle}",
+      "duration": 8,
+      "transitionType": "fade",
+      "soundEffect": "gentle_chime"
+    }
+  ]
+}`;
+
+  let url = '';
+  let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  let chosenModel = '';
+
+  if (provider === 'openrouter') {
+    url = 'https://openrouter.ai/api/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    headers['HTTP-Referer'] = 'http://localhost:5173';
+    headers['X-Title'] = 'My Learning Studio';
+    chosenModel = model || 'deepseek/deepseek-chat';
+  } else if (provider === 'deepseek') {
+    url = 'https://api.deepseek.com/chat/completions';
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    chosenModel = model || 'deepseek-chat';
+  } else if (provider === 'openai') {
+    url = 'https://api.openai.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    chosenModel = model || 'gpt-4o-mini';
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: chosenModel,
+      messages: [
+        { role: 'system', content: 'You are an educational script writer for visual autistic learners. Respond ONLY with valid JSON.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      response_format: { type: 'json_object' }
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`AI API error (${response.status}): ${errorText}`);
+  }
+
+  const data: any = await response.json();
+  const rawContent = data.choices?.[0]?.message?.content || '';
+
+  let cleanJson = rawContent.trim();
+  if (cleanJson.startsWith('```json')) {
+    cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (cleanJson.startsWith('```')) {
+    cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+
+  const parsed = JSON.parse(cleanJson);
+  if (parsed.scenes && Array.isArray(parsed.scenes)) {
+    return parsed.scenes;
+  }
+  throw new Error('AI response did not contain scenes array');
+}
+
 // 6. AI Story Generation Endpoint (Offline Fallback + Online Provider Support)
-app.post('/api/ai/story', (req, res) => {
-  const { topic, language = 'bilingual', targetDurationMinutes = 3, visualStyle = '3d_cartoon', ageLevel = '12 years' } = req.body;
-  
+app.post('/api/ai/story', async (req, res) => {
+  const {
+    topic,
+    language = 'bilingual',
+    targetDurationMinutes = 3,
+    visualStyle = '3d_cartoon',
+    ageLevel = '12 years',
+    provider = 'offline',
+    apiKey,
+    model
+  } = req.body;
+
+  // Try OpenRouter, DeepSeek or OpenAI if configured
+  if ((provider === 'openrouter' || provider === 'deepseek' || provider === 'openai') && apiKey) {
+    try {
+      const generatedScenes = await generateScenesWithAI(
+        provider,
+        apiKey,
+        model,
+        topic || 'Daily routine',
+        language,
+        visualStyle,
+        targetDurationMinutes
+      );
+      if (generatedScenes && generatedScenes.length > 0) {
+        return res.json({
+          success: true,
+          provider,
+          topic,
+          language,
+          scenesCount: generatedScenes.length,
+          scenes: generatedScenes
+        });
+      }
+    } catch (err: any) {
+      console.warn(`[AI Story] ${provider} generation failed, falling back to built-in templates:`, err.message);
+    }
+  }
+
   // Clean topic lookup
   const cleanTopic = (topic || 'Daily routine').toLowerCase();
 
@@ -745,12 +881,77 @@ app.post('/api/ai/story', (req, res) => {
 
 // 7. Test AI Provider Connection
 app.post('/api/ai/test', async (req, res) => {
-  const { provider, apiKey } = req.body;
+  const { provider, apiKey, model } = req.body;
   if (!apiKey && provider !== 'offline' && provider !== 'browser') {
     return res.status(400).json({ success: false, message: 'API key is required for external providers' });
   }
 
-  // Simulated validation for provider
+  // OpenRouter Connection Test
+  if (provider === 'openrouter') {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/auth/key', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'http://localhost:5173',
+          'X-Title': 'My Learning Studio'
+        }
+      });
+      const data: any = await response.json();
+      if (response.ok && data.data) {
+        const label = data.data.label || 'Active Key';
+        const limit = data.data.limit !== null && data.data.limit !== undefined ? ` (Limit: $${data.data.limit})` : '';
+        return res.json({
+          success: true,
+          provider: 'openrouter',
+          message: `Connected successfully to OpenRouter! Key: ${label}${limit}`
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          provider: 'openrouter',
+          message: data.error?.message || 'OpenRouter authentication failed. Please verify your API key.'
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to connect to OpenRouter' });
+    }
+  }
+
+  // DeepSeek Connection Test
+  if (provider === 'deepseek') {
+    try {
+      const response = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: model || 'deepseek-chat',
+          messages: [{ role: 'user', content: 'Say OK' }],
+          max_tokens: 1
+        })
+      });
+      const data: any = await response.json();
+      if (response.ok) {
+        return res.json({
+          success: true,
+          provider: 'deepseek',
+          message: 'Connected successfully to DeepSeek API (deepseek-chat)!'
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          provider: 'deepseek',
+          message: data.error?.message || 'DeepSeek authentication failed. Please check your API key.'
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to connect to DeepSeek API' });
+    }
+  }
+
+  // Simulated / other provider validation
   res.json({
     success: true,
     provider,

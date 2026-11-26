@@ -1,4 +1,5 @@
 import type { AIProviderConfig, Scene, VisualStyle } from '../../types';
+import { db } from '../../db';
 
 export interface GenerateStoryParams {
   topic: string;
@@ -7,20 +8,51 @@ export interface GenerateStoryParams {
   visualStyle: VisualStyle;
   ageLevel: string;
   difficultyLevel: string;
+  provider?: string;
+  apiKey?: string;
+  model?: string;
 }
 
 class AIService {
-  // Offline Educational Story Generator - 100% functional without any API keys!
+  // Educational Story Generator - Supports OpenRouter, DeepSeek, and 100% offline fallback
   public async generateOfflineStory(params: GenerateStoryParams): Promise<Scene[]> {
     const { topic, language, visualStyle } = params;
-    const cleanTopic = topic.trim().toLowerCase();
 
-    // Check backend endpoint first for rich structured templates
+    // Load saved settings if provider is not explicitly passed
+    let provider = params.provider;
+    let apiKey = params.apiKey;
+    let model = params.model;
+
+    try {
+      const saved = await db.settings.get('ai_keys');
+      if (saved?.value) {
+        if (!provider) provider = saved.value.textProvider || 'offline';
+        if (!apiKey) {
+          if (provider === 'openrouter') {
+            apiKey = saved.value.openrouter;
+            model = model || saved.value.openrouterModel || 'deepseek/deepseek-chat';
+          } else if (provider === 'deepseek') {
+            apiKey = saved.value.deepseek;
+            model = model || saved.value.deepseekModel || 'deepseek-chat';
+          } else if (provider === 'openai') {
+            apiKey = saved.value.openai;
+            model = model || 'gpt-4o-mini';
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Check backend endpoint first (handles OpenRouter, DeepSeek, OpenAI, or local generator)
     try {
       const res = await fetch('/api/ai/story', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params)
+        body: JSON.stringify({
+          ...params,
+          provider: provider || 'offline',
+          apiKey,
+          model
+        })
       });
       if (res.ok) {
         const data = await res.json();
@@ -218,7 +250,7 @@ class AIService {
   }
 
   // Test Provider Connection
-  public async testProviderConnection(provider: string, apiKey?: string): Promise<{ success: boolean; message: string }> {
+  public async testProviderConnection(provider: string, apiKey?: string, model?: string): Promise<{ success: boolean; message: string }> {
     if (provider === 'offline' || provider === 'browser') {
       return { success: true, message: 'Local/Browser provider is ready and functional.' };
     }
@@ -230,7 +262,7 @@ class AIService {
       const res = await fetch('/api/ai/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, apiKey })
+        body: JSON.stringify({ provider, apiKey, model })
       });
       const data = await res.json();
       return {

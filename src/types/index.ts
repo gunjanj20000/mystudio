@@ -159,7 +159,7 @@ export interface AIProviderConfig {
   id: string;
   name: string;
   type: 'text' | 'image' | 'tts';
-  provider: 'offline' | 'openai' | 'anthropic' | 'gemini' | 'elevenlabs' | 'stability' | 'pollinations' | 'browser';
+  provider: 'offline' | 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'deepseek' | 'elevenlabs' | 'stability' | 'pollinations' | 'browser';
   apiKey?: string;
   baseUrl?: string;
   model?: string;

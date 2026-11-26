@@ -18,9 +18,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [geminiKey, setGeminiKey] = useState<string>('');
   const [anthropicKey, setAnthropicKey] = useState<string>('');
   const [elevenlabsKey, setElevenlabsKey] = useState<string>('');
+  const [openrouterKey, setOpenrouterKey] = useState<string>('');
+  const [openrouterModel, setOpenrouterModel] = useState<string>('deepseek/deepseek-chat');
+  const [deepseekKey, setDeepseekKey] = useState<string>('');
+  const [deepseekModel, setDeepseekModel] = useState<string>('deepseek-chat');
 
   // Selected Providers
-  const [textProvider, setTextProvider] = useState<'offline' | 'openai' | 'gemini' | 'anthropic'>('offline');
+  const [textProvider, setTextProvider] = useState<'offline' | 'openrouter' | 'deepseek' | 'openai' | 'gemini' | 'anthropic'>('offline');
   const [imageProvider, setImageProvider] = useState<'offline' | 'dalle' | 'pollinations'>('offline');
   const [ttsProvider, setTtsProvider] = useState<'browser' | 'openai' | 'elevenlabs'>('browser');
 
@@ -39,6 +43,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         setGeminiKey(keys.value.gemini || '');
         setAnthropicKey(keys.value.anthropic || '');
         setElevenlabsKey(keys.value.elevenlabs || '');
+        setOpenrouterKey(keys.value.openrouter || '');
+        setOpenrouterModel(keys.value.openrouterModel || 'deepseek/deepseek-chat');
+        setDeepseekKey(keys.value.deepseek || '');
+        setDeepseekModel(keys.value.deepseekModel || 'deepseek-chat');
         setTextProvider(keys.value.textProvider || 'offline');
         setImageProvider(keys.value.imageProvider || 'offline');
         setTtsProvider(keys.value.ttsProvider || 'browser');
@@ -63,6 +71,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         gemini: geminiKey,
         anthropic: anthropicKey,
         elevenlabs: elevenlabsKey,
+        openrouter: openrouterKey,
+        openrouterModel: openrouterModel || 'deepseek/deepseek-chat',
+        deepseek: deepseekKey,
+        deepseekModel: deepseekModel || 'deepseek-chat',
         textProvider,
         imageProvider,
         ttsProvider
@@ -72,9 +84,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     onClose();
   };
 
-  const handleTestConnection = async (provider: string, key?: string) => {
+  const handleTestConnection = async (provider: string, key?: string, model?: string) => {
     setTestStatus((prev) => ({ ...prev, [provider]: { loading: true } }));
-    const result = await aiService.testProviderConnection(provider, key);
+    const result = await aiService.testProviderConnection(provider, key, model);
     setTestStatus((prev) => ({
       ...prev,
       [provider]: { loading: false, message: result.message, success: result.success }
@@ -157,9 +169,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                   Script & Story Generation Provider
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {[
                     { id: 'offline', title: 'Built-in Educational Engine (Free / Offline)' },
+                    { id: 'deepseek', title: 'DeepSeek API (Fast & Smart)' },
+                    { id: 'openrouter', title: 'OpenRouter (Multi-Model Hub)' },
                     { id: 'openai', title: 'OpenAI GPT-4o' },
                     { id: 'gemini', title: 'Google Gemini' },
                     { id: 'anthropic', title: 'Anthropic Claude' }
@@ -177,6 +191,113 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* DeepSeek API Key & Model */}
+              <div className="space-y-2 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700">DeepSeek API Key</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">Recommended</span>
+                  </div>
+                  <button
+                    onClick={() => handleTestConnection('deepseek', deepseekKey, deepseekModel)}
+                    disabled={!deepseekKey || testStatus.deepseek?.loading}
+                    className="text-xs font-bold text-sky-600 hover:underline disabled:opacity-40"
+                  >
+                    {testStatus.deepseek?.loading ? 'Testing...' : 'Test Connection'}
+                  </button>
+                </div>
+                <input
+                  type="password"
+                  placeholder="sk-..."
+                  value={deepseekKey}
+                  onChange={(e) => setDeepseekKey(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono"
+                />
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[11px] font-semibold text-slate-500">Model:</span>
+                  {['deepseek-chat', 'deepseek-reasoner'].map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setDeepseekModel(m)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
+                        deepseekModel === m
+                          ? 'bg-sky-600 text-white border-sky-600'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                {testStatus.deepseek?.message && (
+                  <p className={`text-xs ${testStatus.deepseek.success ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {testStatus.deepseek.message}
+                  </p>
+                )}
+              </div>
+
+              {/* OpenRouter API Key & Model */}
+              <div className="space-y-2 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700">OpenRouter API Key</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-semibold">Multi-Model</span>
+                  </div>
+                  <button
+                    onClick={() => handleTestConnection('openrouter', openrouterKey)}
+                    disabled={!openrouterKey || testStatus.openrouter?.loading}
+                    className="text-xs font-bold text-sky-600 hover:underline disabled:opacity-40"
+                  >
+                    {testStatus.openrouter?.loading ? 'Testing...' : 'Test Connection'}
+                  </button>
+                </div>
+                <input
+                  type="password"
+                  placeholder="sk-or-v1-..."
+                  value={openrouterKey}
+                  onChange={(e) => setOpenrouterKey(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono"
+                />
+                <div className="space-y-1 pt-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-slate-500">Model:</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. deepseek/deepseek-chat"
+                      value={openrouterModel}
+                      onChange={(e) => setOpenrouterModel(e.target.value)}
+                      className="flex-1 px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-mono"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {[
+                      'deepseek/deepseek-chat',
+                      'openai/gpt-4o-mini',
+                      'anthropic/claude-3.5-sonnet',
+                      'google/gemini-2.0-flash-001',
+                      'meta-llama/llama-3.3-70b-instruct'
+                    ].map((sampleModel) => (
+                      <button
+                        key={sampleModel}
+                        onClick={() => setOpenrouterModel(sampleModel)}
+                        className={`text-[10px] px-2 py-0.5 rounded border transition ${
+                          openrouterModel === sampleModel
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {sampleModel}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {testStatus.openrouter?.message && (
+                  <p className={`text-xs ${testStatus.openrouter.success ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {testStatus.openrouter.message}
+                  </p>
+                )}
               </div>
 
               {/* OpenAI API Key */}

@@ -186,7 +186,13 @@ Autistic visual learners thrive on structure, predictability, and sensory calmne
 
 ### 6. Local-First & Zero Paid API Dependency
 - **100% Functional Offline:** Built-in educational story generator, curated image catalog, local SVG animations, browser TTS voices, and Dexie.js IndexedDB storage.
-- **AI Integration (Optional):** Provider-independent adapter architecture supporting OpenAI (GPT-4o, DALL-E, TTS), Google Gemini, Anthropic Claude, and ElevenLabs. API keys are stored only locally in the browser.
+- **AI Integration (Optional):** Provider-independent adapter architecture supporting:
+  - **DeepSeek:** Native integration with DeepSeek Chat (`deepseek-chat`) and DeepSeek Reasoner (`deepseek-reasoner`) via `https://api.deepseek.com`.
+  - **OpenRouter:** Flexible access to hundreds of open and frontier models (DeepSeek, Llama 3, Claude, Mistral) via `https://openrouter.ai`.
+  - **OpenAI:** GPT-4o, DALL-E 3, and OpenAI Text-to-Speech.
+  - **Google Gemini & Anthropic Claude:** Optional story generation.
+  - **ElevenLabs:** Ultra-expressive voice narration.
+- **Privacy & Security:** API keys are stored only locally in the browser's IndexedDB and proxied securely via the local Node.js backend. Zero API keys are hardcoded.
 
 ---
 
